@@ -38,11 +38,10 @@ def svm_loss_naive(W, X, y, reg):
             if margin > 0:
                 loss += margin
 
-    # Right now the loss is a sum over all training examples, but we want it
-    # to be an average instead so we divide by num_train.
+
     loss /= num_train
 
-    # Add regularization to the loss.
+    # loss함수에 reg term을 추가해줘서
     loss += reg * np.sum(W * W)
 
     #############################################################################

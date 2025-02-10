@@ -33,7 +33,6 @@ def affine_forward(x, w, b):
     x_reshape = x.reshape(row_dim, col_dim)
     out = np.dot(x_reshape, w) + b
 
-    cache = (x,w,b)
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -75,7 +74,8 @@ def affine_backward(dout, cache):
     x_reshape = x.reshape(raw, col)
     dw = x_reshape.T.dot(dout) # mul gate를 생각하면 dw를 구할 때는 x에 대한 식만 남고
     dx = dout.dot(w.T).reshape(x.shape) # dx를 구할 때는 w에 대한 식만 남는다.
-    db = dout
+
+    db = np.sum(dout, axis=0)
 
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -216,6 +216,10 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+
+        # men
+
+
         sample_mean = np.mean(x, axis =0)
         sample_var = np.mean(x, axis=0)
         x_hat = (x-sample_mean) / np.sqrt(sample_var)
@@ -292,9 +296,20 @@ def batchnorm_backward(dout, cache):
 
     m = dout.shape[0]
 
+
+    # dout = gamma * x_hat + beta의 식을 각각 편미분을 해야된다.
+    # 즉 dout = gamma * (x-mean / (var + eps) ** 0.5 ) + beta가 되고
+    # mean = np.mean(x, axis=0 ) , var = np.maen((x-mean)**2, axis =0)가 되고
+    # dvar= = dl / dout * dout / dvar
+    # dx = dl/dout * dout/dx
+    # dgamma = dl/dout * x_hat
+    # dbeta = dl/dout * 1
+
+
+    #이와 같이 각각 상황에 맞게 backprop을 진행하면 다음과 같은 코드가 진행된다.
+
     dx_hat = dout * cache['gamma']
-    dsample_var = np.sum(
-        dx_hat * (cache['x'] - cache['sample_mean']) * (-0.5) * (cache['sample_var'] + cache['eps']) ** (-1.5), axis=0)
+    dsample_var = np.sum(dx_hat * (cache['x'] - cache['sample_mean']) * (-0.5) * (cache['sample_var'] + cache['eps']) ** (-1.5), axis=0)
 
 
     dsample_mean = (np.sum(dx_hat * (-1 / np.sqrt(cache['sample_var'] + cache['eps'])), axis=0) +
@@ -386,6 +401,10 @@ def layernorm_forward(x, gamma, beta, ln_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+
+    # batch norm과 계산과정은 크게 다를 건 없지만,
+    # 모든 채널을 합하여서 평균을 내므로 axis=1이어야 한다.
+
     feature_mean = np.mean(x, axis =1)
     feature_var = np.var(x, axis=1)
 
@@ -426,6 +445,11 @@ def layernorm_backward(dout, cache):
     # still apply!                                                            #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+
+
+
+    # Batch norm과 다르지 않게 layer norm도 상황에 맞게 미분을 해서
+    # 구하면 되고, batch norm과 전체적인 흐름이 비슷하다.
 
     eps = 1e-5
     N = dout.shape[1]
@@ -506,8 +530,8 @@ def dropout_forward(x, dropout_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        cache = (dropout_param, mask)
-        out = out.astype(x.dtype, copy=False)
+        # dropout은 test시에는 진행하지 않기에 그냥 x값을 넘겨주면 된다.
+       out = x
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         #######################################################################
@@ -596,15 +620,17 @@ def conv_forward_naive(x, w, b, conv_param):
     # padding
     pad = conv_param['pad']
     x_with_pad = np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad)), 'constant', constant_values=0)
+    # padding은 N,C에선 적용하지 않고
+    # H,W에만 padding을 적용한다.
     _, _, H, W = x_with_pad.shape
 
     # convolving
     stride = conv_param['stride']
 
-    for i in range(0, N):
+    for i in range(0, N): # 전체 데이터 샘플 횟수
         x_data = x_with_pad[i]
 
-        xx, yy = -1, -1
+        xx, yy = -1, -1 # row, column 이동횟수 count
         for j in range(0, H - HH + 1, stride):
             yy += 1
             for k in range(0, W - WW + 1, stride):
@@ -612,12 +638,10 @@ def conv_forward_naive(x, w, b, conv_param):
                 x_rf = x_data[:, j:j + HH, k:k + WW]
 
                 for l in range(0, F):
-                    conv_value = np.sum(x_rf * w[l]) + b[l]
+                    conv_value = np.sum(x_rf * w[l]) + b[l] # dot product
                     out[i, l, yy, xx] = conv_value
 
             xx = -1
-
-    cache = (x, w, b, conv_param)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -656,40 +680,52 @@ def conv_backward_naive(dout, cache):
     x_with_pad = np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad)), 'constant', constant_values=0)
 
     N, F, Hdout, Wdout = dout.shape
+    # 출력 feature map의 크기
 
-    H_out = 1 + (H + 2 * conv_param['pad'] - HH) / conv_param['stride']
-    W_out = 1 + (W + 2 * conv_param['pad'] - WW) / conv_param['stride']
 
     db = np.zeros((b.shape))
     for i in range(0, F):
         db[i] = np.sum(dout[:, i, :, :])
 
+
     dw = np.zeros((F, C, HH, WW))
-    for i in range(0, F):
-        for j in range(0, C):
-            for k in range(0, HH):
-                for l in range(0, WW):
+    for i in range(0, F): # filter 개수
+        for j in range(0, C): # input channel 개수
+            for k in range(0, HH): # kernel height
+                for l in range(0, WW): # kernel width
                     dw[i, j, k, l] = np.sum(
-                        dout[:, i, :, :] * x_with_pad[:, j, k:k + Hdout * stride:stride, l:l + Wdout * stride:stride])
+                        dout[:, i, :, :] * x_with_pad[:, j, k : k + Hdout * stride : stride, l : l + Wdout * stride : stride])
+                    # dout의 i번째 filter를 가져오고, x_with_pad에서는 j번째 channel에서
+                    # k~k+ Hout * strid, l ~ l + Wdout * stride
+                    # input data에서 필터가 적용된 모든 위치를 stride 간격으로 선택하는 역할
+                    # dout[n,f,i,j] * x_with_pad[n,c, i* stride + k, j * stirde + l]
+                    # x_with_pad는 가중치가 적용된 영역
 
     dx = np.zeros((N, C, H, W))
-    for nprime in range(N):
-        for i in range(H):
-            for j in range(W):
-                for f in range(F):
-                    for k in range(Hdout):
-                        for l in range(Wdout):
+    for nprime in range(N): # 데이터 샘플마다 수행
+        for i in range(H): # height
+            for j in range(W): # width
+                for f in range(F): # filter 개수별
+                    for k in range(Hdout): # 출력 feature map 높이
+                        for l in range(Wdout): # 출력 feature map 너비
                             mask1 = np.zeros_like(w[f, :, :, :])
                             mask2 = np.zeros_like(w[f, :, :, :])
+                            # Conv의 filter는 input x의 특정 영역과만 연산을 수행한다.
+                            # 해당 영역을 mask를 통해 선택적으로 활성화를 하고 누적 시켜야 backprop이 된다.
+
                             if (i + pad - k * stride) < HH and (i + pad - k * stride) >= 0:
                                 mask1[:, i + pad - k * stride, :] = 1.0
                             if (j + pad - l * stride) < WW and (j + pad - l * stride) >= 0:
                                 mask2[:, :, j + pad - l * stride] = 1.0
+                            # 다음과 같은 식은 input image의 특정 픽셀 (i,j)에 대하여 filter 내부에 존재하는 지 확인하고
+                            # 있으면 1로 marking 하는 역할을 한다.
 
                             w_masked = np.sum(w[f, :, :, :] * mask1 * mask2, axis=(1, 2))
+                            # channel과 높이 방향으로 더해진다.
+                            # 즉 WW만 남게 된다.
                             dx[nprime, :, i, j] += dout[nprime, f, k, l] * w_masked
+                            # dl/dx = dout * w
 
-    return dx, dw, db
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -736,6 +772,7 @@ def max_pool_forward_naive(x, pool_param):
     out = np.zero(N,C,pool_height, pool_width)
 
 
+    #conv_forward와 유사하다.
     for i in range(0,N):
         x_data = x[i]
 
@@ -802,6 +839,8 @@ def max_pool_backward_naive(dout, cache):
                 for c in range(0,C):
                     x_pool = x_rf[c]
                     if x_pool == np.max(x_rf[c]):
+                        # maxpool 자체가 큰 값만 넘겨주면 되기에
+                        # np.max를
                         mask = x_pool
 
                     dx[i,c,j:j+pool_height,k:k+pool_width] += dout[i,c,xx,yy] * mask
@@ -984,14 +1023,27 @@ def spatial_groupnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
+    # 여기서도 batch norm, layer norm과 연산과정의 전체적인 흐름에 있어서는 크게 다를 것이 없다.
+    # 하지만 batch norm의 평균을 낼 땐 axis = 0
+    # layer norm의 평균을 낼 땐 axis = 1
+    # group norm에서는
+
+
     x, x_mean, x_var, x_std, gamma, x_hat, G = cache
     N, C, H, W = dout.shape
     xg = x.reshape([N, G, C // G, H, W])
     M = C // G * H * W
     dgamma = np.sum(dout * x_hat, axis=(0, 2, 3)).reshape(1, C, 1, 1)
     dbeta = np.sum(dout, axis=(0, 2, 3)).reshape(1, C, 1, 1)
+    # 채널별로 곱한 후에 그 값을 합산한 결과를 저장
+    # N, H, W 차원에 맞게 broadcasting을 할 수 있도록 차원을 맞추는 작업을
+    # .reshape(1,C,1,1)을 통해 해준다.
+    # keepdims = True로 설정해도 된다.
 
-    dvar = np.sum((dout * gamma).reshape(xg.shape) * (xg - x_mean) * (-0.5) * (x_std ** (-3)), axis=(2, 3, 4),
+
+    # axis=(2,3,4)를 통해 C // G, H, W의 평균을 구해서
+    # batch norm, layer norm 처럼 gradient를 구하면 된다.
+    dvar = np.sum((dout * gamma).reshape(xg.shape) * (xg - x_mean) * (-0.5) * (x_std ** (-1.5)), axis=(2, 3, 4),
                   keepdims=True)
     du = np.sum(((-dout * gamma).reshape(xg.shape) / x_std), axis=(2, 3, 4), keepdims=True) + dvar * np.sum(
         (-2 * (xg - x_mean)), axis=(2, 3, 4), keepdims=True) / M

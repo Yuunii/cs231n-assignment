@@ -41,10 +41,13 @@ class PositionalEncoding(nn.Module):
         # Get col idx range (i) and powers
         i = torch.arange(max_len)[:, None]
         pows = torch.pow(10000, -torch.arange(0, embed_dim, 2) / embed_dim)
+        # 10000**(2k/d) 부분이 해당한다.
 
         # Compute positional values sin/cos
         pe[0, :, 0::2] = torch.sin(i * pows)
+        # 0,2,4... 부분은 sin
         pe[0, :, 1::2] = torch.cos(i * pows)
+        # 1,3,5... 부분은 cos
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -172,7 +175,36 @@ class MultiHeadAttention(nn.Module):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        
+        key, value, query = [layer(x).view(N, -1, self.n_head, self.head_dim).transpose(1, 2)
+                             for layer, x in zip((self.key, self.value, self.query), (key, value, query))]
+
+        # self.key, self.value, self.query에 대해서
+        # .view를 통해서 (N, S, H, D)로 multi-head로 변환
+        # .transpose(1,2)를 통해 (N,H,S,D)로 변환 시킨다
+        scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_dim)
+
+        if attn_mask != None:
+            scores = scores.masked_fill(attn_mask.eq(0), -1e12)
+            # masked_fill를 통해 마스킹된 부분을 매우 작은 값으로 설정한다.
+            # 학습을 하면서 컨닝을 방지하기 위해 masked attention을 진행
+
+        scores = F.softmax(scores, dim=-1)
+        # dim = -1일때 마지막 dimension을 기준으로 softmax 연산 진행
+        output = self.attn_drop(scores)
+        output = torch.matmul(output, value)
+        # softmax연산을 거친 output과 value의 dot product 연산을 진행
+
+        output = output.transpose(1, 2).contiguous().view(N, S, E)
+        # transpose(1,2)를 거친 뒤 (N,S,H,D)가 되고
+        # contiguous()는 기존에 쓰던 transpose는 기존 텐서의 차원만 변경하고,
+        # 내부적으로는 원래 메모리 순서를 유지한다.
+        # .view를 적용할려면 contiguous()를 호출하여 연속적인 메모리 배치를 만들어야 한다.
+        # 마지막으로 H*D = E 이므로 view(N,S,E) 변환 작업을 거친다
+        # 여러 개의 헤드를 하나의 벡터로 합쳐 원래 임베딩 차원으로 복원
+
+        output = self.proj(output)
+        # self.proj = nn.Linear(embed_dim, embed_dim)
+        # linear transformation을 수행하는 레이어가 된다.
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

@@ -159,6 +159,9 @@ def rnn_forward(x, h0, Wx, Wh, b):
     N, T, D = x.shape
     x= x.transpose(1,0,2)
 
+    # x의 shape는 (T,N,D)가 되고
+    # loop를 돌 때 연산이 편해지기에 .transpose를 취했다.
+
     H = h0.shape[1]
     h = np.zeros((T,N,H))
 
@@ -221,10 +224,11 @@ def rnn_backward(dh, cache):
     dWh = np.zeros((H,H))
     db= np.zeros((H,))
 
-    # def rnn_step_backward(dnext_h, cache)
-    # return dx, dprev_h, dWx, dWh, db
 
     for t in range(T-1, -1, -1):
+        # backprop 과정은 outputlayer 바로 이전 hidden layer 출발 이기에 T-1을 해준다
+        # -1로 감소 시켜주면서 input layer까지 나아간다.
+
         dx_t, dh0, dWx_t, dWh_t, db_t = rnn_step_forward(dh[:, T, :]+dh0, cache[t])
 
         dx[:,t,:] += dx_t
@@ -353,10 +357,14 @@ def lstm_step_forward(x, prev_h, prev_c, Wx, Wh, b):
     a = np.dot(x,Wx) + np.dot(prev_h, Wh) + b
     # shape of a (N,4H)
 
+
+    # input, forget, ouput, gategate shape는 (N,H)가 된다.
     i = a[:, 0:H]
     f = a[:, H:2*H]
     o = a[:, 2*H:3*H]
     g = a[:, 3*H:4*H]
+
+    #각각 나눠줘서 PPT에 있는 거 처럼 sigmoid와 np.tanh를 거쳐준다.
 
     ai = sigmoid(i)
     af = sigmoid(f)
@@ -405,7 +413,10 @@ def lstm_step_backward(dnext_h, dnext_c, cache):
 
 
     # sig_dev = sigmoid * ( 1 - sigmoid )
+    # np.tanh_dev = (1-np.tanh(x) **2)
 
+
+    # dl/da * da/do
     do = np.tanh(next_c) * dnext_h
     dnext_c += o * (1-np.tanh(next_c)**2) * dnext_h
 
@@ -419,6 +430,7 @@ def lstm_step_backward(dnext_h, dnext_c, cache):
     dai = sigmoid(i) * (1-sigmoid(i)) * di
     dao = sigmoid(o) * (1-sigmoid(o)) * do
     dag = (1- np.tanh(g)**2) * dg
+
 
     da = np.hstack((daf,dai,dao,dag))
     # shape of da is (N,4H)
@@ -477,7 +489,10 @@ def lstm_forward(x, h0, Wx, Wh, b):
 
     prev_h = h0
     prev_c = np.zeros((N,H))
-    # def lstm_step_forward(x, prev_h, prev_c, Wx, Wh, b) // return next_h, next_c, cache
+
+    # def lstm_step_forward(x, prev_h, prev_c, Wx, Wh, b)
+    # return next_h, next_c, cache
+
     cache = []
     h = np.zeros((N,T,H))
     for t in range(T):

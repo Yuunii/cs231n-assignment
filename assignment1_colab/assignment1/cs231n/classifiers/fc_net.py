@@ -55,7 +55,22 @@ class TwoLayerNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        self.params = {}
+        self.reg = reg
+        self.D = input_dim
+        self.M = hidden_dim
+        self.C = num_classes
+        self.reg = reg
+
+        w1 = weight_scale * np.random.randn(self.D, self.M)
+        b1 = np.zeros(hidden_dim)
+        w2 = weight_scale * np.random.randn(self.M, self.C)
+        b2 = np.zeros(self.C)
+
+        self.params.update({'W1': w1,
+                            'W2': w2,
+                            'b1': b1,
+                            'b2': b2})
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -88,7 +103,14 @@ class TwoLayerNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        W1, b1, W2, b2 = self.params['W1'], self.params[
+            'b1'], self.params['W2'], self.params['b2']
+
+        X = X.reshape(X.shape[0], self.D)
+        # first layer
+        hidden_layer, cache_hidden_layer = affine_relu_forward(X, W1, b1)
+        # second layer
+        scores, cache_scores = affine_forward(hidden_layer, W2, b2)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -112,7 +134,26 @@ class TwoLayerNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        data_loss, dscores = softmax_loss(scores, y)
+        reg_loss = 0.5 * self.reg * np.sum(W1 ** 2)
+        reg_loss += 0.5 * self.reg * np.sum(W2 ** 2)
+        loss = data_loss + reg_loss
+
+        # Backpropagaton
+        grads = {}
+        # Backprop into second layer
+        dx1, dW2, db2 = affine_backward(dscores, cache_scores)
+        dW2 += self.reg * W2
+
+        # Backprop into first layer
+        dx, dW1, db1 = affine_relu_backward(
+            dx1, cache_hidden_layer)
+        dW1 += self.reg * W1
+
+        grads.update({'W1': dW1,
+                      'b1': db1,
+                      'W2': dW2,
+                      'b2': db2})
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

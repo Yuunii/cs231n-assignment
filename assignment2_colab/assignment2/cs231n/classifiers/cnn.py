@@ -64,7 +64,9 @@ class ThreeLayerConvNet(object):
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
         self.params['W1'] = np.random.normal(scale=weight_scale,size=(num_filters, input_dim[0], filter_size, filter_size))
-        W2_row_size = num_filters * input_dim[1] / 2 * input_dim[2] / 2
+        W2_row_size = num_filters  *  (input_dim[1]/2)  *  (input_dim[2]/2)
+        # W2_row_size = (N, num_filters, 16, 16)으로 변환하여 다음 layer에 넘김
+
         self.params['W2'] = np.random.normal(scale=weight_scale, size=(W2_row_size, hidden_dim))
         self.params['W3'] = np.random.normal(scale=weight_scale, size=(hidden_dim, num_classes))
 
@@ -93,12 +95,11 @@ class ThreeLayerConvNet(object):
         W2, b2 = self.params["W2"], self.params["b2"]
         W3, b3 = self.params["W3"], self.params["b3"]
 
-        # pass conv_param to the forward pass for the convolutional layer
-        # Padding and stride chosen to preserve the input spatial size
+
         filter_size = W1.shape[2]
         conv_param = {"stride": 1, "pad": (filter_size - 1) // 2}
 
-        # pass pool_param to the forward pass for the max-pooling layer
+
         pool_param = {"pool_height": 2, "pool_width": 2, "stride": 2}
 
         scores = None
@@ -111,6 +112,9 @@ class ThreeLayerConvNet(object):
         # cs231n/layer_utils.py in your implementation (already imported).         #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+
+
+        # conv - relu - 2x2 max pool - affine - relu - affine - softmax
 
         out_1, cache_1 = conv_relu_pool_forward(X, W1, b1, conv_param, pool_param)
         out_2, cache_2 = affine_relu_forward(out_1, W2, b2)
@@ -140,6 +144,8 @@ class ThreeLayerConvNet(object):
 
         loss, dscores = softmax_loss(scores, y)
         loss += sum(0.5 * self.reg * np.sum(W_tmp ** 2) for W_tmp in [W1, W2, W3])
+
+        # conv - relu - 2x2 maxpool - affine - relu - affine - softmax
 
         dx_3, grads['W3'], grads['b3'] = affine_backward(dscores, cache_3)
         dx_2, grads['W2'], grads['b2'] = affine_relu_backward(dx_3, cache_2)

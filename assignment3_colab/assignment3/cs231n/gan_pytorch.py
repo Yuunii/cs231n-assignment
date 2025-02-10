@@ -53,6 +53,10 @@ def discriminator(seed=None):
 
     model = nn.Sequential(
         nn.Flatten(),
+        # MNIST Image가 input으로 들어왔을 때
+        # size는 (N,1,28,28)인데,
+        # flatten()을 통하여 (N, 1x28x28)이 된다.
+        # nn.Flatten()을 통해 행렬곱이 가능한 형태로 만들어준다.
         nn.Linear(784, 256),
         nn.LeakyReLU(0.01),
         nn.Linear(256, 256),
@@ -130,7 +134,6 @@ def discriminator_loss(logits_real, logits_fake):
 
     loss_real = bce_loss(logits_real.reshape(-1), torch.ones_like(logits_real, dtype=float).reshape(-1))
     # loss_real은 discriminator가 실제 데이터 x를 받고 계산한 출력값이 된다.
-    # 진짜일 확률의 logits이 된다.
     loss_fake = bce_loss(logits_fake.reshape(-1), torch.zeros_like(logits_fake, dtype=float).reshape(-1))
     # loss_fake는 discrminator가 generator가 생성한 가짜 이미지에 대해 확률값이 된다.
     loss = loss_fake + loss_real
@@ -195,6 +198,7 @@ def ls_discriminator_loss(scores_real, scores_fake):
 
     loss = 0.5*torch.mean(torch.square(scores_fake))+ 0.5*torch.mean(torch.square(scores_real -1))
     # 0.5 * (D(G(z))**2 + 0.5 * (D(x)-1) ** 2
+    # GAN.ipynb 식을 참고하면 된다.
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     return loss
@@ -233,32 +237,19 @@ def build_dc_classifier(batch_size):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    CONV1 = nn.Conv2d(1, 32, kernel_size=5, stride=1)
-    # nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
-    initialize_weights(CONV1)
-    LeakyReLU = nn.LeakyReLU(negative_slope=0.01)
-    POOL = nn.MaxPool2d(kernel_size=2, stride=2)
-    CONV2 = nn.Conv2d(32, 64, kernel_size=5, stride=1)
-    initialize_weights(CONV2)
-    FC1 = nn.Linear(4 * 4 * 64, 4 * 4 * 64)
-    # nn.Linear(in_features , out_features)
-    initialize_weights(FC1)
-    FC2 = nn.Linear(4 * 4 * 64, 1)
-    initialize_weights(FC2)
-    model = nn.Sequential(
-        CONV1,
-        LeakyReLU,
-        POOL,
-        CONV2,
-        LeakyReLU,
-        POOL,
+    return nn.Sequential(
+        Unflatten(batch_size, 1, 28, 28),
+        nn.Conv2d(1, 32, 5, 1),
+        nn.LeakyReLU(0.01),
+        nn.MaxPool2d(2, 2),
+        nn.Conv2d(32, 64, 5, 1),
+        nn.LeakyReLU(0.01),
+        nn.MaxPool2d(2, 2),
         Flatten(),
-        FC1,
-        LeakyReLU,
-        FC2
+        nn.Linear(4 * 4 * 64, 4 * 4 * 64),
+        nn.LeakyReLU(0.01),
+        nn.Linear(4 * 4 * 64, 1)
     )
-
-    return model
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
     #                               END OF YOUR CODE                             #
@@ -278,30 +269,21 @@ def build_dc_generator(noise_dim=NOISE_DIM):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    FC1 = nn.Linear(noise_dim, 1024)
-    initialize_weights(FC1)
-    ReLU = nn.ReLU()
-    FC2 = nn.Linear(1024, 7 * 7 * 128)
-    initialize_weights(FC2)
-    CONVT1 = nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1)
-    CONVT2 = nn.ConvTranspose2d(64, 1, kernel_size=4, stride=2, padding=1)
-    tanh = nn.Tanh()
-    model = nn.Sequential(
-        FC1,
-        ReLU,
+    return nn.Sequential(
+        nn.Linear(noise_dim, 1024),
+        nn.ReLU(),
         nn.BatchNorm1d(1024),
-        FC2,
-        ReLU,
+        nn.Linear(1024, 7 * 7 * 128),
+        nn.ReLU(),
         nn.BatchNorm1d(7 * 7 * 128),
-        Unflatten(),
-        CONVT1,
-        ReLU,
+        Unflatten(-1, 128, 7, 7),
+        nn.ConvTranspose2d(128, 64, 4, 2, 1),
+        nn.ReLU(),
         nn.BatchNorm2d(64),
-        CONVT2,
-        tanh,
+        nn.ConvTranspose2d(64, 1, 4, 2, 1),
+        nn.Tanh(),
         Flatten()
     )
-    return model
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################

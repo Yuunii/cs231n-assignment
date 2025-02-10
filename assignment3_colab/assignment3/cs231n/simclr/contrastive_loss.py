@@ -20,6 +20,7 @@ def sim(z_i, z_j):
     ##############################################################################
 
     norm_dot_product = (z_i / torch.linalg.norm(z_i)) @ (z_j / torch.linalg.norm(z_j))
+    # left와 right의 Cosine Similiarity
 
     ##############################################################################
     #                               END OF YOUR CODE                             #
@@ -57,16 +58,23 @@ def simclr_loss_naive(out_left, out_right, tau):
         ##############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        # Create lists of non-exponentiated unnormalized similarity scores
-        sims_k = torch.tensor([sim(z_k, z) for z in out[np.arange(2 * N) != k]])
-        sims_k_N = torch.tensor([sim(z_k_N, z) for z in out[np.arange(2 * N) != k + N]])
+        num1 = torch.exp(sim(z_k, z_k_N) / tau)
+        deno1 = 0
+        for l in range(2 * N):
+            if l == k:
+                continue
+            deno1 += torch.exp(sim(z_k, out[l]) / tau)
+        loss1 = - torch.log(num1 / deno1)
 
-        # Compute l(k, k+N) and l(k+N, k), given the lists of similarity scores
-        l1 = -((sim(z_k, z_k_N) / tau).exp() / (sims_k / tau).exp().sum()).log()
-        l2 = -((sim(z_k_N, z_k) / tau).exp() / (sims_k_N / tau).exp().sum()).log()
+        num2 = torch.exp(sim(z_k_N, z_k) / tau)
+        deno2 = 0
+        for l in range(2 * N):
+            if l == k + N:
+                continue
+            deno2 += torch.exp(sim(z_k_N, out[l]) / tau)
+        loss2 = -torch.log(num2 / deno2)
 
-        # Update the total loss
-        total_loss += l1 + l2
+        total_loss += loss1 + loss2
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
          ##############################################################################
@@ -135,6 +143,7 @@ def compute_sim_matrix(out):
 
     norm_out = out / torch.linalg.norm(out, dim=1, keepdim=True)
     sim_matrix = norm_out @ norm_out.T
+    # 2N x 2N size가 된다.
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     
@@ -150,12 +159,17 @@ def simclr_loss_vectorized(out_left, out_right, tau, device='cuda'):
     Inputs and output are the same as in simclr_loss_naive.
     """
     N = out_left.shape[0]
-    
+
     # Concatenate out_left and out_right into a 2*N x D tensor.
+
     out = torch.cat([out_left, out_right], dim=0)  # [2*N, D]
+    # 각 데이터의 두 aumentation을 concate을 통해 하나의 matrix를 만든다.
     
     # Compute similarity matrix between all pairs of augmented examples in the batch.
+
     sim_matrix = compute_sim_matrix(out)  # [2*N, 2*N]
+    # Cosine similarity를 계산하여 sim_matrix를 만든다.
+    # out[i]와 out[j]의 유사도를 나타냄
     
     ##############################################################################
     # TODO: Start of your code. Follow the hints.                                #
@@ -163,24 +177,37 @@ def simclr_loss_vectorized(out_left, out_right, tau, device='cuda'):
     
     # Step 1: Use sim_matrix to compute the denominator value for all augmented samples.
     # Hint: Compute e^{sim / tau} and store into exponential, which should have shape 2N x 2N.
+
     exponential = (sim_matrix / tau).exp().to(device)
+    # 유사도를 계산한 후 tau를 적용한 뒤 softmax 분모에 들어갈 값으로 변환
     
-    # This binary mask zeros out terms where k=i.
+    # This binary mask zeros out terms where k=i. and we apply the binary mask
+
     mask = (torch.ones_like(exponential, device=device) - torch.eye(2 * N, device=device)).to(device).bool()
-    
-    # We apply the binary mask.
     exponential = exponential.masked_select(mask).view(2 * N, -1)  # [2*N, 2*N-1]
+
+    # mask에서 torch.eye는 대각요소만 1로 만드는 단위 행렬이므로
+    # mask의 최종연산은 대각요소는 0 그 이외의 요소는 1
+    # mask_select를 통해 자기 자신을 제외한 나머지 유사도 값들만 남게 된다.
     
     # Hint: Compute the denominator values for all augmented samples. This should be a 2N x 1 vector.
     denom = exponential.sum(dim=1)
+    # negative sample을 포함한 총합을 계산한다.
 
     # Step 2: Compute similarity between positive pairs.
     # You can do this in two ways: 
     # Option 1: Extract the corresponding indices from sim_matrix. 
     # Option 2: Use sim_positive_pairs().
+
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
     sim_pairs = sim_matrix[range(2 * N), [*range(N, 2 * N), *range(0, N)]]
+    # range(2 * N) = 0,1,2,3..2N-1
+    # range(N, 2 * N) = N, N+1...2N-1
+    # 여기서 out[0]은 out[N], out[1]은 out[N+1] ... 이렇게 매칭이 돼서
+    # 첫번째 aug와 두번째 aug가 짝을 이루는 경우가 된다.
+    # range(0,N)은 out[N]은 out[0], out[N+1]은 out[1]과 매칭이 돼서
+    # 두번째 aug와 첫번째 aug가 짝을 이룬다
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     

@@ -90,30 +90,24 @@ class CaptioningTransformer(nn.Module):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        # Embed the captions.
-        # shape: [N, T] -> [N, T, W]
-        caption_embeddings = self.embedding(captions)
-        caption_embeddings = self.positional_encoding(caption_embeddings)
+        embeddings = self.positional_encoding(self.embedding(captions))
+        # 임베딩된 단어에 positional encoding을 진행한다.
+        image_projections = self.visual_projection(features).unsqueeze(1)
+        # 이미지 특징을 D차원의 벡터에서 transformer 입력 차원 D로 변환
+        # unsqueeze(1)를 통해 (N,D)에서 (N,1,D)로 변환한다.
 
-        # Project image features into the same dimension as the text embeddings.
-        # shape: [N, D] -> [N, W] -> [N, 1, W]
-        projected_features = self.visual_projection(features).unsqueeze(1)
+        tgt_mask = torch.tril(torch.ones(T, T))
+        # tgt_mask는 (T,T)크기의 하삼각 행렬이다.
+        # torch.tril은 하삼각 행렬을 생성하며
+        # 하삼각 행렬은 i>=j일때 1, 그 이외에는 모두 0을 가진다.
+        # mask의 역할을 하게 된다.
 
-        # An additive mask for masking the future (one direction).
-        # shape: [T, T]
-        tgt_mask = torch.tril(torch.ones(T, T,
-                                         device=caption_embeddings.device,
-                                         dtype=caption_embeddings.dtype))
+        scores = self.transformer(embeddings, image_projections, tgt_mask)
 
-        # Apply the Transformer decoder to the caption, allowing it to also
-        # attend to image features.
-        features = self.transformer(tgt=caption_embeddings,
-                                    memory=projected_features,
-                                    tgt_mask=tgt_mask)
+        scores = self.output(scores)
+        # self.output = nn.Linear(wordvec_dim, vocab_size)
+        # v는 어휘 크기가 되며, linear transformation을 통해 각 단어에 대한 확률 점수 계산
 
-        # Project to scores per token.
-        # shape: [N, T, W] -> [N, T, V]
-        scores = self.output(features)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
